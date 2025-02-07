@@ -11,6 +11,7 @@ require_once "includes/functions.lib.php";
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial scale=1.0">
     <title>Import Excel to DB</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
     <link rel="stylesheet" href="./css/main.css">
 </head>
@@ -18,15 +19,20 @@ require_once "includes/functions.lib.php";
 <body>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
-    <form class = "", action = "", enctype = "multipart/form-data" method="post">
+    <form class="" , action="" , enctype="multipart/form-data" method="post">
         <h3>Import Excel Data</h3>
         <input type="file" name="excel" value="" required>
         <button type="submit" name="import">Import</button>
     </form>
 
     <?php
+
+    $error = "";
+    $message = "";
+    $table = "";
+
     // Read and Insert Data
-    if(isset($_POST["import"])){
+    if (isset($_POST["import"])) {
 
         // Get the extension
         $fileName = $_FILES["excel"]["name"];
@@ -39,16 +45,20 @@ require_once "includes/functions.lib.php";
         /* Move the uploaded file from the temp 
         folder to the uploads for preparation */
         move_uploaded_file($_FILES["excel"]["tmp_name"], $targetDir);
-        
+
         error_reporting(0);
         ini_set('display_error', 0);
 
         // Spreadsheet Reader
         require "excelReader/excel_reader2.php";
         require "excelReader/SpreadsheetReader.php";
-        
-        $reader = new SpreadsheetReader($targetDir);
 
+        $reader = new SpreadsheetReader($targetDir);
+        // Get the list of sheets
+        $sheets = $reader->Sheets();
+        // Retrieve the worksheet called 'sheet1'
+        // $spreadsheet->getSheetByName('sheet1');
+        
         // DB Connect
         $pdo = connectDB();
         if ($pdo && 1 == 1) {
@@ -59,19 +69,23 @@ require_once "includes/functions.lib.php";
 
                 $rowCount = 0;
                 $first = true; // Flag to track the first iteration
-                $cooretHeader = "namecountryageemailphoneaccountaccount_datebalanceactive";
+                $coorectHeader = "namecountryageemailphoneaccountaccount_datebalanceactive";
 
-                foreach($reader as $key => $row){
+                // Insert 1.st sheet
+                // Access the first sheet
+                $reader->ChangeSheet(0); // 0 is the index for the first sheet
+                foreach ($reader as $row) {
+                    
                     // Skip the first iteration if the Header is correct
                     if ($first) {
                         // Header Check
                         $header = strtolower(implode($row));
-                        if($header == $cooretHeader){
+                        if ($header == $coorectHeader) {
                             echo "Header OK";
-                            $first = false; 
+                            $first = false;
                             continue;
                         } else {
-                            echo "Incorrect Header!";
+                            $error .= "Incorrect Header!";
                         }
                     }
                     // Convert the date to a DateTime object
@@ -89,33 +103,75 @@ require_once "includes/functions.lib.php";
                     $stmt->execute();
                     $rowCount++;
                 }
-                echo '<div class="alert alert-success" role="alert">'
-                . $rowCount . ' rows inserted successfully!
-                </div>';
+                $message = $rowCount . ' rows inserted successfully! (Bank Users) ';
+
+
+                // Insert 2.nd sheet
+                $query_bic = "INSERT INTO country_bic (country, bic_swift)
+                VALUES (:country, :bic_swift);";
+                $stmt = $pdo->prepare($query_bic);
+                
+                $rowCount = 0;
+                $first = true; // Flag to track the first iteration
+                $coorectHeader = "countrybic/swift";
+
+                // Access the second sheet
+                if (isset($sheets[1])) { // Check if the second sheet exists
+
+                    $reader->ChangeSheet(1); // 1 is the index for the second sheet
+                    foreach ($reader as $row) {
+                        // Skip the first iteration if the Header is correct
+                        if ($first) {
+                            // Header Check
+                            $header = strtolower(implode($row));
+                            if ($header == $coorectHeader) {
+                                echo "Header 2 OK";
+                                $first = false;
+                                continue;
+                            } else {
+                                $error .= "Incorrect Header 2!";
+                            }
+                        }
+
+                        $stmt->bindParam(":country", $row[0]);
+                        $stmt->bindParam(":bic_swift", $row[1]);
+                        $stmt->execute();
+                        $rowCount++;
+                    }
+
+                } else {
+                    $error .= "Second sheet does not exist.\n";
+                }
+
+                $message .= $rowCount . ' rows inserted successfully! (BIC/SWIFT) ';
 
             } catch (PDOException $e) {
                 echo "Error: " . $e->getMessage();
-            } 
+            }
 
             $pdo = null; // Close the connection
             $stmt = null;
-            
-        }// PDO Connection Error handling is in connectDB function
+        } // PDO Connection Error handling is in connectDB function
 
         // Cleanup file from uploads
-        if(unlink($targetDir)) {
-            echo '<div class="alert alert-primary" role="alert">
-            The Uploaded file ' . $fileName . ' is deleted from uploads. 
-            </div>';
+        if (unlink($targetDir)) {
+            $message .= 'The Uploaded file ' . $fileName . ' is deleted from uploads.';
         };
     }
+
+
+    $select_q = "SELECT bank_users.*, country_bic.bic_swift
+    FROM bank_users
+    LEFT JOIN country_bic
+    ON bank_users.country = country_bic.country";
+
     // Show data fronm DB
-    $rows = tbData2Array("bank_users");
+    $rows = tbData2Array("bank_users", $select_q);
 
     $i = 1;
     $td = "";
     // Show Details from DB
-    foreach($rows as $row) {
+    foreach ($rows as $row) {
         $td .= '<tr>';
         $td .= '<td scope="row">' . $row["id"] . '</td>';
         $td .= '<td >' . $row["name"] . '</td>';
@@ -123,12 +179,12 @@ require_once "includes/functions.lib.php";
         $td .= '<td >' . $row["country"] . '</td>';
         $td .= '<td >' . $row["email"] . '</td>';
         $td .= '<td >' . $row["account"] . '</td>';
+        $td .= '<td >' . $row["bic_swift"] . '</td>';
         $td .= '<td >' . $row["active"] . '</td>';
         $td .= '</tr>';
-
     }
 
-    $msg = '<table class="table table-dark table-striped table-hover table-sm">
+    $table = '<table class="table table-dark table-striped table-hover table-sm">
     <caption>List of users</caption>
     <tr>
         <td scope="col">#</td>
@@ -137,19 +193,27 @@ require_once "includes/functions.lib.php";
         <td scope="col">Age</td>
         <td scope="col">Email</td>
         <td scope="col">Account</td>
+        <td scope="col">BIC/SWIFT</td>
         <td scope="col">Active</td>
     </tr>
     <div>'
-    . $td .
-    '</div>
+        . $td .
+        '</div>
     </table>';
-    echo $msg;
-    
+
+    if($error != ""){
+        echo '<div class="alert alert-danger" role="alert"">' . $error . '</div>';
+    };
+    if($message != ""){
+        echo '<div class="alert alert-primary" role="alert"">' . $message . '</div>';
+    };
+    echo $table;
+
     ?>
     <script>
-        $(document).ready(function(){
-            // Add functionality to remove the element when clicked
-            $('.alert').on('click', function() {
+        $(document).ready(function() {
+            // Use event delegation to handle dynamically added elements
+            $(document).on('click', '.alert', function() {
                 $(this).remove();
             });
         });

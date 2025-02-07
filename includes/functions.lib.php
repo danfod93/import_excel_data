@@ -19,12 +19,18 @@ function connectDB(){
     }
 }
 
-function tbData2Array(string $tbname) {
+function tbData2Array(string $tbname="", string $userQuery="") {
     try {
         $pdo = connectDB();
 
         // Prepare the SQL query to fetch all data from the specified table
         $query = "SELECT * FROM " . $tbname;
+
+        // Use Custom query if passed
+        if(is_string($userQuery) && $userQuery != "") {
+            $query = $userQuery;
+        }
+
         $stmt = $pdo->prepare($query);
 
         // Execute the query
