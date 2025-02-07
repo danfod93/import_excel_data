@@ -163,7 +163,8 @@ require_once "includes/functions.lib.php";
     $select_q = "SELECT bank_users.*, country_bic.bic_swift
     FROM bank_users
     LEFT JOIN country_bic
-    ON bank_users.country = country_bic.country";
+    ON bank_users.country = country_bic.country
+    ORDER BY bank_users.id";
 
     // Show data fronm DB
     $rows = tbData2Array("bank_users", $select_q);
