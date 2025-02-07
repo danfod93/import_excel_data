@@ -1,8 +1,9 @@
 # Import Excel Data with SpreadsheetReader
--PDO connection
--Header Check included
--Bootstrap 5.3.3
--functions.lib.php: Contains my functions. (there will have more)
+- PDO connection
+- Header Check included
+- Change sheet added
+- Bootstrap 5.3.3
+- functions.lib.php: Contains my functions. (there will have more)
 
 DB Table Used
 CREATE TABLE asd (
@@ -18,4 +19,12 @@ CREATE TABLE asd (
         active enum('Yes', 'No'),
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (id)
-    );
+);
+
+CREATE TABLE country_bic(
+        id INT(11) NOT NULL AUTO_INCREMENT,
+        country VARCHAR(50) NOT NULL,
+        bic_swift VARCHAR(20) NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+);
